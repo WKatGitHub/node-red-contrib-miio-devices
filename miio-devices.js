@@ -40,36 +40,6 @@ module.exports = function(RED){
                 dev.model = reg.model ? reg.model : dev.model;
                 dev.token = reg.token ? reg.token : dev.token;
     
-                regDevs['12334578'] = {
-                    address: '192.168.0.202',
-                    model: 'dupa-magnet-max',  
-                    token: undefined 
-                };
-            
-                regDevs['87654321'] = {
-                    address: '192.168.0.203',
-                    model: 'dupa-cube-max',   
-                    token: '3245664644632424',    
-                };
-    
-                regDevs['87654361'] = {
-                    address: '192.168.0.204',
-                    model: 'dupa-motion-max',   
-                    token: '3245664644632fd24',    
-                };
-    
-                regDevs['87654324'] = {
-                    address: '192.168.0.205',
-                    model: 'dupa-sensor_ht-max',   
-                    token: '32456646443532fd24',    
-                };
-    
-                regDevs['85654324'] = {
-                    address: '192.168.0.206',
-                    model: 'dupa-switch-m2',   
-                    token: '32456646443532fds24',    
-                };
-    
                 if(dev.status){
                     connectDevice(reg.id);
                 }
