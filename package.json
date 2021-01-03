@@ -1,0 +1,20 @@
+{
+    "name": "node-red-contrib-miio-devices",
+    "version": "0.0.1",
+    "license": "MIT",
+    "description": "miIO device library for node red",
+    "repository": "WKatGitHub/node-red-contrib-miio-devices",
+    "maintainers": [{
+        "name": "wk",
+        "email": "w.k.email.at@gmail.com"
+    }],
+    "keywords": ["node-red", "miio", "xiaomi","mi"],
+    "node-red": {
+        "nodes": {
+            "miio-device": "miio-devices.js"
+        }
+    },
+    "dependencies": {
+        "miio": ">=0.15.6" 
+    }
+}
