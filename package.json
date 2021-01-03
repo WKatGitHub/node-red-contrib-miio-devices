@@ -4,6 +4,7 @@
     "license": "MIT",
     "description": "miIO device library for node red",
     "repository": "WKatGitHub/node-red-contrib-miio-devices",
+    "private": true,
     "maintainers": [{
         "name": "wk",
         "email": "w.k.email.at@gmail.com"
