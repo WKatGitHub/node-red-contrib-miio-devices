@@ -22,11 +22,11 @@
             let node = this;
             if(!node.optDevs){  
                 try{
-                    await $.getJSON('miiodevices', (data)=>{
+                    await $.getJSON('miiodevices', (devList)=>{
                         let select = $('<select>', {id: 'node-input-devId', placeholder: 'eg.: 54356532', style: 'width:70%;'});
                         select.append($('<option>', {'data-hide': "y", text: 'unconfigured'}));
-                        for(let devId in data){
-                            let dev = data[devId];
+                        for(let devId in devList){
+                            let dev = devList[devId];
                             if(dev.model){
                                 select.append($('<option>', {value: devId, 'data-hide': dev.token, text: devId +' '+ dev.model +' '+ dev.address}));
                             }
