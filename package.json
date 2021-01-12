@@ -16,6 +16,6 @@
         }
     },
     "dependencies": {
-        "miio": "/WKatGitHub/miio#0.15-ext"
+        "miio": "WKatGitHub/miio#0.15-ext"
     }
 }
