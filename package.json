@@ -3,8 +3,11 @@
     "version": "0.0.1",
     "license": "MIT",
     "description": "miIO device library for node red",
-    "repository": "WKatGitHub/node-red-contrib-miio-devices",
-    "private": true,
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/WKatGitHub/node-red-contrib-miio-devices.git"
+    },
+    "private": false,
     "maintainers": [{
         "name": "wk",
         "email": "w.k.email.at@gmail.com"

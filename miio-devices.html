@@ -1,11 +1,11 @@
 
 <script type="text/javascript">
     RED.nodes.registerType('miio-device', {
-        category: 'Xiaomi miIO devices',
+        category: 'Xiaomi Devices',
         color: '#a6bbcf',
         defaults: {
             name: {value:"Device-1"},
-            devId: {value: "unconfigured"},
+            devId: {value: undefined},
             devToken: {value: "", validate:RED.validators.regex(/^([0-9a-f]{32}|)$/)},
             confirmCmd: {value: false},
             listenEvents: {value: false}
@@ -20,11 +20,32 @@
         outputLabels: ['On Data'],
         oneditprepare: async function(){
             let node = this;
+
+            function showHelp(){
+                let selDev = $("#node-input-devId option:selected");
+                if(selDev.data('hide') === ""){ 
+                    $("#node-row-devToken").removeClass('hide');
+                    $("#device-token-help").removeClass('hide');
+                } else {
+                    $("#node-input-devToken").val("");
+                    $("#node-row-devToken").addClass('hide');
+                    $("#device-token-help").addClass('hide');
+                }
+
+                ['airpurifier','cube','magnet','motion','sensor_ht','switch'].forEach(function(type){
+                    if(selDev.text().indexOf(type) !== -1){
+                        $('#'+type+'-help').removeClass('hide');
+                    } else {
+                        $('#'+type+'-help').addClass('hide');
+                    }
+                })
+            };
+
             if(!node.optDevs){  
                 try{
                     await $.getJSON('miiodevices', (devList)=>{
                         let select = $('<select>', {id: 'node-input-devId', placeholder: 'eg.: 54356532', style: 'width:70%;'});
-                        select.append($('<option>', {'data-hide': "y", text: 'unconfigured'}));
+                        select.append($('<option>', {'data-hide': "y", text: undefined}));
                         for(let devId in devList){
                             let dev = devList[devId];
                             if(dev.model){
@@ -38,28 +59,13 @@
                     select.append($('<option>', {'data-hide': "y", text: 'Connection error'}));
                     node.optDevs = select;
                 }
-            }
+            };
+
             $("#node-input-devToken").val(node.devToken);
             $("#node-row-devId").append(node.optDevs);
-            $("#node-input-devId").on("change", function(){
-                let selDev = $("#node-input-devId option:selected");
-                if(selDev.data('hide') === ""){ 
-                    $("#node-row-devToken").removeClass('hide');
-                } else {
-                    $("#node-input-devToken").val("");
-                    $("#node-row-devToken").addClass('hide');
-                }
-
-                ['airpurifier','cube','magnet','motion','sensor_ht','switch'].forEach(function(type){
-                    if(selDev.text().indexOf(type) !== -1){
-                        $('#'+type+'-help').removeClass('hide');
-                    } else {
-                        $('#'+type+'-help').addClass('hide');
-                    }
-                })
-
-            });
-            $("#node-input-devId").val(node.devId).trigger("change");
+            $("#node-input-devId").on("change", showHelp);
+            //$("#node-input-devId").val(node.devId).trigger("change");
+            showHelp();
         },
         oneditsave: function(){
             this.devId = $('#node-input-devId').val();
@@ -93,6 +99,17 @@
 </script>
 
 <script type="text/x-red" data-help-name="miio-device">
+
+<div id="device-token-help">
+    <p>Device Token</p>
+    It is recommended to store tokens safely in file. 
+    To do so on the computer, on witch is installed node-red, 
+    execute command: 
+    <p><code>
+        miio tokens update id-or-address --token token-as-hex
+    </code></p>
+</div>
+
 <div id="cube-help">
     <p>Xiaomi Mi Magic Cube.</p>
     Input device, please double click and select device.
@@ -140,8 +157,6 @@
     <pre><code>payload: {power: true, favoriteLevel: 1, buzzer: true, mode: 'favorite'}</code></pre>
 
 
-
-    <p>Xiaomi Air Purifier</p>
     Inject JSON payload to set Air Purifier properties.
     Sample JSON:
     <pre><code>payload: {   

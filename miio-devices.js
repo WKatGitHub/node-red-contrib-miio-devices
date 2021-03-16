@@ -2,83 +2,89 @@
 module.exports = function(RED){
     "use strict";
     const miio = require('miio');
+    
     const connectDevice = (id)=>{  
         if(!miioDevs[id]){
             let dev = regDevs[id];
             if(dev && dev.status !== 'Connecting'){
                 dev.status = 'Connecting';
-                let reg = {
-                    address: dev.address,
-                    model: dev.model,
-                    token: dev.token
-                }
-                miio.device(reg)
+                dev.rssi= '...';
+                dev.connect()
                     .then((device)=>{
                         miioDevs[id] = device;
                         dev.status = 'Connected';
-                        RED.log.info('Device connected: '+ dev.name +'  IP address: '+ dev.address +'  Model: '+ dev.model +'  ID: '+ id);
-                        dev.nodeStatus();  
+                        device.management.info()
+                            .then((info) => { 
+                                dev.rssi= info.ap.rssi;
+                                dev.updateStats();
+                            }).catch((err)=>{ //console.log('---------------------------------- device.management.info() error: '+ err +'-------------------------------------');
+                                dev.updateStats();
+                            });
                     }).catch((err)=>{
                         dev.status = 'Connection error';
-                        RED.log.error(err +'  '+ dev.name +'  IP address: '+ dev.address +'  Model: '+ dev.model +'  ID: '+ id);
-                        dev.nodeStatus();   
+                        dev.updateStats(err);
+                        
+                        const reConnDev= () => connectDevice(id);
+                        setTimeout(reConnDev, 10 * 60000); // try to reconnect after 10 minutes
                 });
             }
         }
     }
 
     let miioDevs = {}; // connected miio devices
-    let regDevs = {}; // registered miio devices
-    let nOfNodes = 0; // number off nodes
+    let regDevs = {};  // registered miio devices
     let broker = undefined;
 
     const miioBroker = ()=>{
-        const registerDevice = (reg)=>{
-            let dev = regDevs[reg.id]
-            if(dev){	
-                dev.address = reg.address;
-                dev.model = reg.model ? reg.model : dev.model;
-                dev.token = reg.token ? reg.token : dev.token;
-    
-                if(dev.status){
-                    connectDevice(reg.id);
-                }
-            } else {
-                regDevs[reg.id] = {
-                    address: reg.address,
-                    model: reg.model,   // Miio, to get a device model, requires the correct configuration of the dns server, eg. when using mDNS and Avahi:
-                    token: reg.token,    // /etc/nsswitch.conf hosts: mdns4_minimal files [NOTFOUND = return] dns mdns4
-                };
+        const registerDevice = (reg)=>{ //miiRED.log.info('Run test of miio-devices f2 --------------------> registerDevice reg: ' + JSON.stringify(reg));
+            if(!regDevs[reg.id]){
+                regDevs[reg.id] = {};
             }
+            let dev = regDevs[reg.id];
+            dev.address = reg.address;
+            dev.port = reg.port;
+            dev.token = reg.token ? reg.token : dev.token; 
+            dev.connect = reg.connect;
+            dev.model = reg.model || 'unknown'; // Miio, to get a device model, requires the correct configuration of the dns server, eg. when using mDNS and Avahi:
+                                                // /etc/nsswitch.conf hosts: mdns4_minimal files [NOTFOUND = return] dns mdns4
+            if(dev.nodeId){                     // To check local hostnames by using Avahi, execute command: avahi-browse -at
+                connectDevice(reg.id);
+            } //RED.log.info('Run test of miio-devices f2 --------------------> registerDevice dev: ' + JSON.stringify(dev)); //RED.log.info('Run test of miio-devices f2 --------------------> registerDevice regDevs: ' + JSON.stringify(regDevs));
         }
-        const unregisterDevice = (reg)=>{ 
+
+        const unregisterDevice = (reg)=>{
             const device = miioDevs[reg.id];
             if(!device) return;                
             device.destroy();
             miioDevs[reg.id] = undefined;
+
             let dev = regDevs[reg.id];
-            if(dev.status){
+            if(dev.nodeId){
                 if(!dev.disconnEpoch) { 
                     dev.disconnEpoch = [];
                 }
-                while(dev.disconnEpoch.length > 2){
+                let now = Date.now();
+                if(dev.disconnEpoch.length === 3){
                     dev.disconnEpoch.shift();
+                    dev.disconnEpoch.push(now);
+                    dev.disconnCount = 0;
+                    for(let i in dev.disconnEpoch){ 
+                        dev.disconnCount += ((now - dev.disconnEpoch[i]) < 3600000) ? 1 : 0;
+                    }
+                } else {   
+                    dev.disconnEpoch.push(now);
                 }
-                dev.disconnEpoch.push(Date.now());
                 dev.status = 'Disconnected';
-                RED.log.info('Device disconnected: '+ dev.name +'  IP address: '+ dev.address +'  Model: '+ dev.model +'  ID: '+ reg.id);
-                dev.nodeStatus();
+                dev.updateStats();
             }
         }
 
         if(broker){
-            if(nOfNodes < 1){
-                broker.stop();
-                broker = undefined;
-                RED.log.info('Miio broker -> stopped');
-            }
+            broker.stop();
+            broker = undefined;
+            RED.log.info('Miio broker -> stopped');
             return;
-        } else if(nOfNodes < 1){return;}
+        }
 
         broker = miio.browse({
             cacheTime: 60 // 5 minutes. Default is 1800 seconds (30 minutes)
@@ -88,19 +94,33 @@ module.exports = function(RED){
         RED.log.info('Miio broker -> starting registration of devices');   
     }
 
-    
-    function MiioDevice(n){
+    function MiioDevice(n){ //RED.log.info('Run test of miio-devices f4 --------------------> MiioDevice ');
         RED.nodes.createNode(this, n);
         const node = this;
         const confirmCmd = n.confirmCmd;
         const listenEvents = n.listenEvents;
         const devName = n.name;
         const devId = n.devId;
-        let dev = {};
-        let devConnStatus = 0;
-        const eventHandler = (e)=>{
-            let evalue = e.value , eunit;
-            if(e.key === 'temperature'){
+        let devConnError = "✘ Connection lost";
+
+    //  let dev = {
+            // name : n.name,
+            // nodeId: n.id,
+            // address: reg.address,
+            // rssi: info.ap.rssi,
+            // token: reg.token / n.devToken,
+            // port: reg.port,
+            // connect: reg.connect,
+            // model: reg.model / info.model,
+            // status: 'Connecting'/'Connection error'/'Connected'/ 'Disconnected', 
+            // updateStats : function() {},
+            // disconnEpoch : [],
+            // disconnCount : 0;
+    //   };
+
+        function eventHandler(e) { //RED.log.info('Run test of miio-devices f5 --------------------> eventHandler ');
+            let evalue = e.value, eunit;
+            if (e.key === 'temperature') {
                 evalue = e.value.value;
                 eunit = e.value.unit;
             }
@@ -112,141 +132,132 @@ module.exports = function(RED){
                     timeStamp: Date.now()
                 }
             };
-            if(e.action){
+            if (e.action) {
                 msg.payload.action = e.action;
-                msg.payload.amount = e.data.amount; 
+                msg.payload.amount = e.data.amount;
             }
             node.send(msg);
         }
-        const nodeStatus = ()=>{
-            dev = regDevs[devId];
+
+        function updateStats(err){
             let device = miioDevs[devId];
-            if(dev.status === 'Connected' && device){
+            let statSuffix = '  ID: '+ devId +'  IP: '+ this.address +'  Rssi: '+ this.rssi +'dB';
+            let logSuffix = this.name +'  Model: '+ this.model + statSuffix;
+
+            if(this.status === 'Connected' && device){
+                node.send({payload:{deviceStatus: this.status, deviceName: devName}, topic: 'status'});
+                node.status({fill:'green', shape:'dot', text: this.status + statSuffix});
+                RED.log.info('Device connected: '+ logSuffix);
+
                 if(listenEvents){ // Turn on events listeners
                     device.on('stateChanged', eventHandler);
                     device.on('action', eventHandler);
                 }
-                node.send({payload:{deviceStatus: 'Connected', deviceName: devName}, topic: 'status'});
-                node.status({fill:'green', shape:'dot', text: 'Connected   ID:'+ devId +'   IP:'+ dev.address});
-            } else if(dev.status === 'Connection error'){
-                node.status({fill:'red', shape:'dot', text: 'Connection error   ID:'+ devId +'   IP:'+ dev.address});
-            } else if(dev.status === 'Disconnected' || !device){
-                let now = Date.now(), disconnCount = 0;
-                if((dev.disconnEpoch) && dev.disconnEpoch.length === 3){
-                    for(let i in dev.disconnEpoch){ // Change the status if there were more than 3 disconnections in the last hour
-                        disconnCount += ((now - dev.disconnEpoch[i]) < 3600000) ? 1 : 0;
-                    }
-                } 
-                devConnStatus = disconnCount === 3 ? "✘ WiFi" : "✘ Connection lost";
-                node.status({fill:'gray', shape:'ring', text: 'Disconnected   ID:'+ devId +'   IP:'+ dev.address});
+            } else if(this.status === 'Connection error'){
+                node.status({fill:'red', shape:'dot', text: this.status + statSuffix});
+                RED.log.error(err +'  '+ logSuffix);
+
+            } else if(this.status === 'Disconnected'){
+                node.status({fill:'gray', shape:'ring', text: this.status + statSuffix});
+                RED.log.info('Device disconnected: '+ logSuffix);
             }
+            if(this.disconnCount === 3){devConnError = "✘ WiFi Rssi: "+ this.rssi} // Change the status if there were 3 disconnections in the last hour
         }
 
-        
+        if(!broker){ // turn on miio broker
+            miioBroker();
+        }
         if(devId) { // assign device to node
             if(!regDevs[devId]) {
-                regDevs[devId] = {};  
-                devConnStatus++; 
+                regDevs[devId] = {};
             }
-            dev = regDevs[devId]; 
-            if(!dev.status) { 
+            let dev = regDevs[devId]; 
+            if(!dev.nodeId) {
                 dev.name = devName;
-                dev.nodeStatus = nodeStatus;
-                dev.status = n.id; // reserve device for this node
+                dev.nodeId = n.id; // reserve device for this node 
                 dev.token = dev.token ? dev.token : n.devToken;
-                devConnStatus++;
+                dev.updateStats = updateStats;
             }
-            if(dev.name === devName) { 
-                devConnStatus++;
-
-                if(nOfNodes < 1){ // turn on miio broker
-                    nOfNodes = 1;
-                    miioBroker();
-                } else {
-                    nOfNodes++;
-                } //console.log('Number of nodes -->', nOfNodes);
-                console.log(devName,'Connection Status: ', devConnStatus); 
-                if(devConnStatus !== 3 && !miioDevs[devId]){
+            if(dev.nodeId === n.id) { 
+                if(dev.address){
                     connectDevice(devId); 
                 } else {
-                    nodeStatus();
+                    node.status({fill:'green', shape:'ring', text: 'Configured  ID: '+ devId});
                 }
             } else { // device is assigned to other node
-                node.status({fill:'grey',shape:'ring',text: 'Device: '+ devId +' is assigned to node: '+ dev.name});
+                node.status({fill:'grey',shape:'ring',text: 'Device: '+ devId +' is assigned to node: '+ dev.nodeId});
                 return;
             }
-        } else { // node is not configured
+        } else { // node is not configured  RED.log.info('Run test of miio-devices f7 --------------------> unconfigured device');
             node.status({fill:'grey',shape:'ring',text: 'Unconfigured'});
             return;
         }
         
-        node.on('input', function(msg) {
-            let payload = msg.payload;
-            let device = miioDevs[devId];
-            if(device){
-                if(payload.deviceName === undefined || payload.deviceName === devName){
-                    for(let key in payload){
-                        if(typeof device[key] === 'function'){ //console.log( key+'(',payload[key],')');
-                            (async ()=>{
-                                try { 
-                                    let arg = payload[key];
-                                    if(arg === null){arg = undefined}
-                                    let res = await device[key](arg); //console.log(key + '('+ JSON.stringify(payload[key]) +') > ' + JSON.stringify(res));
-                                    if(res !== undefined){
-                                        if(!res.error){
-                                            if(typeof res === 'object'){
+        node.on('input', (msg) => {
+                let payload = msg.payload;
+                let device = miioDevs[devId];
+                if (device) {
+                    if (payload.deviceName === undefined || payload.deviceName === devName) {
+                        for (let key in payload) {
+                            if (typeof device[key] === 'function') { //console.log( key+'(',payload[key],')');
+                                (async () => {
+                                    try {
+                                        let arg = payload[key];
+                                        if (arg === null) { arg = undefined; }
+                                        let res = await device[key](arg); //console.log(key + '('+ JSON.stringify(payload[key]) +') > ' + JSON.stringify(res));
+                                        if (res !== undefined) {
+                                            if (!res.error) {
+                                                if (typeof res === 'object') {
+                                                    res.deviceName = devName;
+                                                    msg.payload = res;
+                                                    node.send(msg);
+                                                } else if (confirmCmd === true) { //confirmation of commands
+                                                    msg.payload = { [key]: res, deviceName: devName };
+                                                    node.send(msg);
+                                                }
+                                            } else { //send an error to display as an alert
+                                                res.error = devName + ' > ' + res.error;
                                                 res.deviceName = devName;
-                                                msg.payload = res;
-                                                node.send(msg); 
-                                            } else if(confirmCmd === true){ //confirmation of commands
-                                                msg.payload = {[key]: res, deviceName: devName};
-                                                node.send(msg);
-                                            }                                           
-                                        } else { //send an error to display as an alert
-                                            res.error = devName +' > '+ res.error;
-                                            res.deviceName = devName;
-                                            node.send({payload: res, topic: 'error'});
+                                                node.send({ payload: res, topic: 'error' });
+                                            }
                                         }
+                                    } catch (err) { //log other errors
+                                        let dev = regDevs[devId];
+                                        RED.log.error(key + '(' + JSON.stringify(payload[key]) + ') > ' + err + '  ' + devName +
+                                            '  IP address: ' + dev.address +'  Rssi: '+ dev.rssi +'dB  Model: ' + dev.model + '  ID: ' + devId);
                                     }
-                                } catch(err) { //log other errors
-                                    RED.log.error(key + '('+ JSON.stringify(payload[key]) +') > ' + err +'  '+ dev.name +
-                                                    '  IP address: '+ dev.address +'  Model: '+ dev.model +'  ID: '+ devId);
-                                }
-                            })(); 
-                        }       
+                                })();
+                            }
+                        }
+                    }
+                } else { // device is disconnected
+                    if (msg.topic === 'status') {
+                        msg.payload = { deviceStatus: devConnError, deviceName: devName };
+                        node.send(msg);
                     }
                 }
-            } else { // device is disconnected
-                if(msg.topic === 'status'){
-                    msg.payload = {deviceStatus: devConnStatus, deviceName: devName};
-                    node.send(msg);
-                }
-            } 
-        });
+            });
 
-        node.on('close', function(){
-            let device = miioDevs[devId];
-            if(device){
+        node.on('close', () => {
+                if(broker){ // turn off miio broker
+                    miioBroker();
+                }
+                let device = miioDevs[devId];
                 device.destroy();
-                miioDevs[devId] = undefined;
-            }
-            nOfNodes--;
-            if(nOfNodes < 1){ // turn off miio broker
-                miioBroker();
-            }
-        });
+                miioDevs[devId] = undefined; //console.log('Device: '+ devName +' disconnected -------------------------------------> DevId:' + devId);
+            });
     }
     RED.nodes.registerType("miio-device", MiioDevice);
 
-    RED.httpAdmin.get("/miiodevices", RED.auth.needsPermission('miio-devices.read'), function(req,res) {
+    RED.httpAdmin.get("/miiodevices", RED.auth.needsPermission('miio-devices.read'), (req, res) => {
         let devList = {};
-        for(let key in regDevs){
+        for (let key in regDevs) {
             devList[key] = {
                 address: regDevs[key].address,
                 model: regDevs[key].model,
                 token: regDevs[key].token ? 'y' : ''
-            }
-        }
+            };
+        } // console.log('Run test of miio-devices f11 --------------------> get miiodevices devList: ' + JSON.stringify(devList));
         res.json(devList);
     });
 } // end of module.exports
