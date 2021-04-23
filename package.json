@@ -5,7 +5,7 @@
     "description": "miIO device library for node red",
     "repository": {
         "type": "git",
-        "url": "https://github.com/WKatGitHub/node-red-contrib-miio-devices.git"
+        "url": "git+https://github.com/WKatGitHub/node-red-contrib-miio-devices.git"
     },
     "private": false,
     "maintainers": [{
