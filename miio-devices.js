@@ -3,19 +3,22 @@ module.exports = function(RED){
     "use strict";
     const miio = require('miio');
     
-    const connectDevice = (id)=>{  
+    const connectDevice = (id)=>{  //console.log('----------------------------------> connectDevice: '+ id +' <-------------------------------------');
         if(!miioDevs[id]){
             let dev = regDevs[id];
             if(dev && dev.status !== 'Connecting'){
                 dev.status = 'Connecting';
                 dev.rssi= '...';
-                dev.connect()
-                    .then((device)=>{
+                dev.connect() 
+                    .then((device)=>{ //console.log('---------------------------------- device: '+ JSON.stringify(device) +'-------------------------------------');
                         miioDevs[id] = device;
                         dev.status = 'Connected';
                         device.management.info()
-                            .then((info) => { 
+                            .then((info) => {  //console.log('---------------------------------- device.management.info() info: '+ JSON.stringify(info) +'-------------------------------------');
                                 dev.rssi= info.ap.rssi;
+                                if(dev.model == 'unknown'){
+                                    dev.model= info.model;
+                                }
                                 dev.updateStats();
                             }).catch((err)=>{ //console.log('---------------------------------- device.management.info() error: '+ err +'-------------------------------------');
                                 dev.updateStats();
@@ -25,7 +28,7 @@ module.exports = function(RED){
                         dev.updateStats(err);
                         
                         const reConnDev= () => connectDevice(id);
-                        setTimeout(reConnDev, 10 * 60000); // try to reconnect after 10 minutes
+                        setTimeout(reConnDev, 2 * 60000); // try to reconnect after 2 minutes
                 });
             }
         }
@@ -36,7 +39,7 @@ module.exports = function(RED){
     let broker = undefined;
 
     const miioBroker = ()=>{
-        const registerDevice = (reg)=>{ //miiRED.log.info('Run test of miio-devices f2 --------------------> registerDevice reg: ' + JSON.stringify(reg));
+        const registerDevice = (reg)=>{ //RED.log.info('Run test of miio-devices f2 --------------------> registerDevice reg: ' + JSON.stringify(reg));
             if(!regDevs[reg.id]){
                 regDevs[reg.id] = {};
             }
@@ -87,7 +90,7 @@ module.exports = function(RED){
         }
 
         broker = miio.browse({
-            cacheTime: 60 // 5 minutes. Default is 1800 seconds (30 minutes)
+            cacheTime: 450 // 7,5 minutes. Default is 1800 seconds / 3
         });
         broker.on('available', registerDevice);
         broker.on('unavailable', unregisterDevice);
@@ -196,7 +199,7 @@ module.exports = function(RED){
         node.on('input', (msg) => {
                 let payload = msg.payload;
                 let device = miioDevs[devId];
-                if (device) {
+                if (device) { //console.log(payload.deviceName + '   device.handle.api.parent.packet._serverStampTime ----- > ' + JSON.stringify(device.handle.api.parent.packet._serverStampTime));
                     if (payload.deviceName === undefined || payload.deviceName === devName) {
                         for (let key in payload) {
                             if (typeof device[key] === 'function') { //console.log( key+'(',payload[key],')');
