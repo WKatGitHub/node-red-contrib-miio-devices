@@ -20,6 +20,6 @@
         }
     },
     "dependencies": {
-        "miio": "--save https://github.com/WKatGitHub/miio/tarball/0.15-ext"
+        "miio": "https://github.com/WKatGitHub/miio/tarball/0.15-ext"
     }
 }
