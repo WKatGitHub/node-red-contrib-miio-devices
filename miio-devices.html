@@ -21,24 +21,16 @@
         oneditprepare: async function(){
             let node = this;
 
-            function showHelp(){
+            function showToken(){
                 let selDev = $("#node-input-devId option:selected");
                 if(selDev.data('hide') === ""){ 
                     $("#node-row-devToken").removeClass('hide');
-                    $("#device-token-help").removeClass('hide');
+                    $("#node-row-tokenInfo").removeClass('hide');
                 } else {
                     $("#node-input-devToken").val("");
                     $("#node-row-devToken").addClass('hide');
-                    $("#device-token-help").addClass('hide');
+                    $("#node-row-tokenInfo").addClass('hide');
                 }
-
-                ['airpurifier','cube','magnet','motion','sensor_ht','switch'].forEach(function(type){
-                    if(selDev.text().indexOf(type) !== -1){
-                        $('#'+type+'-help').removeClass('hide');
-                    } else {
-                        $('#'+type+'-help').addClass('hide');
-                    }
-                })
             };
 
             if(!node.optDevs){  
@@ -63,9 +55,8 @@
 
             $("#node-input-devToken").val(node.devToken);
             $("#node-row-devId").append(node.optDevs);
-            $("#node-input-devId").on("change", showHelp);
-            //$("#node-input-devId").val(node.devId).trigger("change");
-            showHelp();
+            $("#node-input-devId").on("change", showToken);
+            $("#node-input-devId").val(node.devId).change();
         },
         oneditsave: function(){
             this.devId = $('#node-input-devId').val();
@@ -86,6 +77,16 @@
         <label for="node-input-devToken"><i class="fa fa-key"></i> Token</label>
         <input type="text" id="node-input-devToken" placeholder="eg.: 159a7b4345f6789cbde648f37d6988a3" style="width:70%;">
     </div>
+    <div class="form-row" id="node-row-tokenInfo">
+        <div class="form-tips node-help">       
+            It is recommended to store tokens safely in file. 
+            To do so on the computer, on witch is installed node-red, 
+            execute command: 
+            <code>
+                miio tokens update id-or-address --token token-as-hex
+            </code> 
+        </div>
+    </div>
     <div class="form-row">
         <label><i class="fa fa-reply-all"></i> Output</label>
         <input type="checkbox" id="node-input-confirmCmd" style="width:auto; margin-bottom: 5px;"/>
@@ -99,16 +100,6 @@
 </script>
 
 <script type="text/x-red" data-help-name="miio-device">
-
-<div id="device-token-help">
-    <p>Device Token</p>
-    It is recommended to store tokens safely in file. 
-    To do so on the computer, on witch is installed node-red, 
-    execute command: 
-    <p><code>
-        miio tokens update id-or-address --token token-as-hex
-    </code></p>
-</div>
 
 <div id="cube-help">
     <p>Xiaomi Mi Magic Cube.</p>
